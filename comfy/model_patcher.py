@@ -442,7 +442,7 @@ class ModelPatcher:
 
     def unpatch_model(self, device_to=None, unpatch_weights=True):
         if unpatch_weights:
-            if self.model_lowvram:
+            if hasattr(self, 'model_lowvram') and self.model_lowvram: # fix onediff issue
                 for m in self.model.modules():
                     if hasattr(m, "prev_comfy_cast_weights"):
                         m.comfy_cast_weights = m.prev_comfy_cast_weights

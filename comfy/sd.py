@@ -22,6 +22,7 @@ from . import sdxl_clip
 import comfy.text_encoders.sd3_clip
 import comfy.text_encoders.sa_t5
 import comfy.text_encoders.aura_t5
+import comfy.text_encoders.hydit
 
 import comfy.model_patcher
 import comfy.lora
@@ -60,7 +61,7 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip):
 
 
 class CLIP:
-    def __init__(self, target=None, embedding_directory=None, no_init=False):
+    def __init__(self, target=None, embedding_directory=None, no_init=False, tokenizer_data={}):
         if no_init:
             return
         params = target.params.copy()
@@ -79,7 +80,7 @@ class CLIP:
             if not model_management.supports_cast(load_device, dt):
                 load_device = offload_device
 
-        self.tokenizer = tokenizer(embedding_directory=embedding_directory)
+        self.tokenizer = tokenizer(embedding_directory=embedding_directory, tokenizer_data=tokenizer_data)
         self.patcher = comfy.model_patcher.ModelPatcher(self.cond_stage_model, load_device=load_device, offload_device=offload_device)
         self.layer_idx = None
         logging.debug("CLIP model load device: {}, offload device: {}".format(load_device, offload_device))
@@ -135,7 +136,11 @@ class CLIP:
             return self.cond_stage_model.load_sd(sd)
 
     def get_sd(self):
-        return self.cond_stage_model.state_dict()
+        sd_clip = self.cond_stage_model.state_dict()
+        sd_tokenizer = self.tokenizer.state_dict()
+        for k in sd_tokenizer:
+            sd_clip[k] = sd_tokenizer[k]
+        return sd_clip
 
     def load_model(self):
         model_management.load_model_gpu(self.patcher)
@@ -381,6 +386,7 @@ class CLIPType(Enum):
     STABLE_CASCADE = 2
     SD3 = 3
     STABLE_AUDIO = 4
+    HUNYUAN_DIT = 5
 
 def load_clip(ckpt_paths, embedding_directory=None, clip_type=CLIPType.STABLE_DIFFUSION):
     clip_data = []
@@ -429,6 +435,9 @@ def load_clip(ckpt_paths, embedding_directory=None, clip_type=CLIPType.STABLE_DI
         if clip_type == CLIPType.SD3:
             clip_target.clip = comfy.text_encoders.sd3_clip.sd3_clip(clip_l=True, clip_g=True, t5=False)
             clip_target.tokenizer = comfy.text_encoders.sd3_clip.SD3Tokenizer
+        elif clip_type == CLIPType.HUNYUAN_DIT:
+            clip_target.clip = comfy.text_encoders.hydit.HyditModel
+            clip_target.tokenizer = comfy.text_encoders.hydit.HyditTokenizer
         else:
             clip_target.clip = sdxl_clip.SDXLClipModel
             clip_target.tokenizer = sdxl_clip.SDXLTokenizer
@@ -520,7 +529,7 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
         if clip_target is not None:
             clip_sd = model_config.process_clip_state_dict(sd)
             if len(clip_sd) > 0:
-                clip = CLIP(clip_target, embedding_directory=embedding_directory)
+                clip = CLIP(clip_target, embedding_directory=embedding_directory, tokenizer_data=clip_sd)
                 m, u = clip.load_sd(clip_sd, full_model=True)
                 if len(m) > 0:
                     m_filter = list(filter(lambda a: ".logit_scale" not in a and ".transformer.text_projection.weight" not in a, m))

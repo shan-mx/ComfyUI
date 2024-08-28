@@ -560,6 +560,10 @@ class PromptServer():
 
             return web.Response(status=200)
 
+        @routes.get("/health")
+        async def health(request):
+            return web.json_response({"status":"ok"})
+
     def add_routes(self):
         self.user_manager.add_routes(self.routes)
 

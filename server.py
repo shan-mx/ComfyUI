@@ -116,6 +116,10 @@ class PromptServer():
 
         self.on_prompt_handlers = []
 
+        @routes.get("/health")
+        async def health(request):
+            return web.json_response({"status": "ok"})
+
         @routes.get('/ws')
         async def websocket_handler(request):
             ws = web.WebSocketResponse()
@@ -193,7 +197,7 @@ class PromptServer():
 
         def compare_image_hash(filepath, image):
             hasher = node_helpers.hasher()
-            
+
             # function to compare hashes of two images to see if it already exists, fix to #3465
             if os.path.exists(filepath):
                 a = hasher()
@@ -598,7 +602,7 @@ class PromptServer():
                     self.prompt_queue.delete_history_item(id_to_delete)
 
             return web.Response(status=200)
-        
+
         # Internal route. Should not be depended upon and is subject to change at any time.
         # TODO(robinhuang): Move to internal route table class once we refactor PromptServer to pass around Websocket.
         @routes.post("/internal/models/download")
@@ -621,7 +625,7 @@ class PromptServer():
             if session is None:
                 logging.error("Client session is not initialized")
                 return web.Response(status=500)
-            
+
             task = asyncio.create_task(download_model(lambda url: session.get(url), model_filename, url, model_directory, report_progress, progress_interval))
             await task
 
@@ -630,10 +634,6 @@ class PromptServer():
     async def setup(self):
         timeout = aiohttp.ClientTimeout(total=None) # no timeout
         self.client_session = aiohttp.ClientSession(timeout=timeout)
-
-        @routes.get("/health")
-        async def health(request):
-            return web.json_response({"status":"ok"})
 
     def add_routes(self):
         self.user_manager.add_routes(self.routes)

@@ -185,6 +185,10 @@ class PromptServer():
 
         self.on_prompt_handlers = []
 
+        @routes.get("/health")
+        async def health(request):
+            return web.json_response({"status": "ok"})
+
         @routes.get('/ws')
         async def websocket_handler(request):
             ws = web.WebSocketResponse()

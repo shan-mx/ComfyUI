@@ -360,6 +360,53 @@ class ThresholdMask:
         mask = (mask > value).float()
         return (mask,)
 
+class FilterMask:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "masks": ("MASK", {"multiple": True}),  # Allows input of multiple masks
+            }
+        }
+
+    CATEGORY = "mask"
+
+    RETURN_TYPES = ("MASK",)
+
+    FUNCTION = "filter_masks"
+
+    def filter_masks(self, masks):
+        filtered_masks = []
+        for mask in masks:
+            mask = mask.reshape((-1, mask.shape[-2], mask.shape[-1]))
+            for single_mask in mask:
+                total_area = single_mask.shape[0] * single_mask.shape[1]
+                mask_area = torch.sum(
+                    single_mask > 0.5
+                )  # Assumes pixels > 0.5 are part of the mask area
+
+                # Check mask area
+                if mask_area <= total_area / 3:
+                    # Check mask height
+                    mask_pixels = torch.nonzero(single_mask > 0.5)
+                    if len(mask_pixels) > 0:
+                        min_y = mask_pixels[:, 0].min().item()
+                        max_y = mask_pixels[:, 0].max().item()
+                        mask_height = max_y - min_y + 1
+
+                        # Keep the mask if its height doesn't exceed a certain proportion of the image height
+                        if mask_height <= single_mask.shape[0] / 1.5:
+                            filtered_masks.append(single_mask)
+                    else:
+                        # Add the mask if there are no valid mask pixels (all black mask)
+                        filtered_masks.append(single_mask)
+
+        if len(filtered_masks) == 0:
+            # Return an all-black mask if all masks were filtered out
+            return (torch.zeros_like(masks[0]),)
+
+        return (torch.stack(filtered_masks, dim=0),)
+
 
 NODE_CLASS_MAPPINGS = {
     "LatentCompositeMasked": LatentCompositeMasked,
@@ -374,9 +421,11 @@ NODE_CLASS_MAPPINGS = {
     "FeatherMask": FeatherMask,
     "GrowMask": GrowMask,
     "ThresholdMask": ThresholdMask,
+    "FilterMask": FilterMask,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageToMask": "Convert Image to Mask",
     "MaskToImage": "Convert Mask to Image",
+    "FilterMask": "Filter Masks by Area",
 }
